@@ -1,0 +1,64 @@
+---
+title: "Bayesian Data Analysis - Assignment 2"
+output: pdf_document
+bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+@bayesian_data_analysis_2013
+
+---
+
+Load the `algae` dataset.
+```{r}
+library(aaltobda)
+data("algae")
+```
+
+Algae dataset visualized.
+```{r}
+a = sum(algae == 0) / length(algae)
+b = sum(algae == 1) / length(algae)
+barplot(c(a, b), ylim = c(0, 1.0), names.arg = c(0, 1))
+```
+
+## a)
+```{r}
+beta_point_est <- function(prior_alpha, prior_beta, data) {
+  n = length(data)
+  y = sum(data == 1)
+  (prior_alpha + y) / (prior_beta + n + y)
+}
+beta_point_est(prior_alpha = 2, prior_beta = 10, data = algae)
+```
+
+```{r}
+beta_interval <- function(prior_alpha, prior_beta, data, prob) {
+  n = length(data)
+  y = sum(data == 1)
+  offset = (1 - prob) / 2
+  qbeta(c(offset, offset + prob), prior_alpha + y, prior_beta + n - y)
+}
+beta_interval(prior_alpha = 2, prior_beta = 10, data = algae, prob = 0.9)
+```
+
+## b)
+```{r}
+beta_low <- function(prior_alpha, prior_beta, data, pi_0) {
+  n = length(data)
+  y = sum(data == 1)
+  pbeta(pi_0, prior_alpha + y, prior_beta + n - y)
+}
+beta_low(prior_alpha = 2, prior_beta = 10, data = algae, pi_0 = 0.2)
+```
+
+## c)
+
+
+## d)
+
+
+## References
