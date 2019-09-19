@@ -1,0 +1,133 @@
+---
+title: "Bayesian Data Analysis - Assignment 1"
+output: pdf_document
+# bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1)
+I rehearsed most of these with help from Wikipedia.
+
+* **Probability** -- A measure of how likely an event is to occur.
+* **Probability mass** -- Probability of a discrete random variable.
+* **Probability mass function (pmf)** -- A function that gives the probability that a discrete random variable is exactly equal to some value.
+* **Probability density function (pdf)** -- Specifies the probability of the continuous random variable falling within a particular range of values.
+* **Probability distribution** -- Description of a random phenomenon in terms of the probabilities of events.
+* **Discrete probability distribution** -- Probability distribution for discrete random variables.
+* **Continuous probability distribution** -- Probability distribution for continuous random variables.
+* **Cumulative distribution function (cdf)** -- Sum or integral from minus infinity to $x$ of a probability distribution.
+* **Likelihood** -- Expresses how probable a given set of observations is for different values of statistical parameters.
+
+## 2)
+### a)
+Plot of the Beta-distribution
+
+```{r}
+mu = 0.2
+gamma_sq = 0.01
+alpha = mu * (mu * (1 - mu) / gamma_sq - 1)
+beta = alpha * (1 - mu) / mu
+x = seq(0, 1, 0.01)
+d = dbeta(x, alpha, beta)
+plot(x, d)
+```
+
+### b)
+Histogram of the random samples from Beta-distribution.
+
+```{r}
+samples = rbeta(1000, alpha, beta)
+hist(samples)
+```
+
+Visually, the histogram looks similar to the Beta-distribution's density function as expected.
+
+### c)
+Mean and variance of the samples and their relative errors.
+
+```{r}
+m = mean(samples)
+m
+abs(mu - m) # Relative error
+```
+
+```{r}
+v = var(samples)
+v
+abs(gamma_sq - v) # Relative error
+```
+
+Relative errors are small, thus the values roughly match the real values.
+
+### d)
+Estimation of the central 95%-interval
+
+```{r}
+quantile(samples, probs=c(0.95))
+```
+
+
+## 3)
+
+To better understand how well the test works, we'll calculate the probabilities for true and false negatives and positives for a randomly sampled individual from the population. 
+
+* True-negative -- No cancer and test shows no cancer
+* False-positive -- No cancer, but test shows cancer
+* True-positive -- Has cancer and test shows cancer
+* False-negative -- Has cancer, but the test shows no cancer
+
+The probabilities are
+
+```{r}
+0.999 * 0.96 # True negative
+0.999 * 0.04 # False positive
+0.001 * 0.98 # True positive
+0.001 * 0.02 # False negative
+```
+
+As seen from the probabilities, the test has a high probability of showing a false positive. Using the test would lead to large numbers of unnecessary, potentially harmful, treatments.
+
+## 4)
+### a)
+The probability of picking a red ball
+```{r}
+boxes <- matrix(
+  c(2, 4, 1, 5, 1, 3), ncol=2,
+  dimnames=list(c("A", "B", "C"), c("red", "white"))
+)
+p_red <- function(boxes) {
+  0.4 * boxes["A", "red"] / sum(boxes["A",]) + 
+  0.1 * boxes["B", "red"] / sum(boxes["B",]) + 
+  0.5 * boxes["C", "red"] / sum(boxes["C",])
+}
+p_red(boxes)
+```
+
+### b)
+```{r}
+p_boxes <- function(boxes) {
+  c(0.4 * boxes["A", "red"] / sum(boxes["A",]) / p_red(boxes),
+  0.1 * boxes["B", "red"] / sum(boxes["B",]) / p_red(boxes), 
+  0.5 * boxes["C", "red"] / sum(boxes["C",]) / p_red(boxes))
+}
+p_boxes(boxes)
+```
+
+The red ball has the highest probability of being picked from box C.
+
+## 5)
+The probability that fraternal twins are both boys is $1/4$ because the possible combinations are boy-boy, boy-girl, girl-boy, and girl-girl.
+
+The probability that identical twins are both boys is $1/2$ because the possible combinations are boy-boy or girl-girl.
+
+Therefore the probability that Elvis (male) had an identical brother (male) is given by the conditional probability:
+
+```{r}
+p_identical_twin <- function(fraternal_prob, identical_prob) {
+  identical_prob / (fraternal_prob + identical_prob)
+}
+p_identical_twin(fraternal_prob = 1/4 * 1/150, identical_prob = 1/2 * 1/400)
+```
