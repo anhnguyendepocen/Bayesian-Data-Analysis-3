@@ -1,0 +1,15 @@
+---
+title: "Bayesian Data Analysis - Assignment X"
+output: pdf_document
+bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+@bayesian_data_analysis_2013
+
+## Subtitle
+
+## References
