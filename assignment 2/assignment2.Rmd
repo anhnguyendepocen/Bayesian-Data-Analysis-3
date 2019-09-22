@@ -3,16 +3,25 @@ title: "Bayesian Data Analysis - Assignment 2"
 output: pdf_document
 bibliography: bibliography.bib
 ---
+## Inference for binomial proportion
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-@bayesian_data_analysis_2013
+Regarding the equations, we refer to the course textbook, @bayesian_data_analysis_2013, chapters 2.1 - 2.4.
+
+Let $\pi$ be the probability of a monitoring site having detectable blue-green algae levels.
+
+In our Bayesian model:
+
+- Likelihood $P(y\mid\pi)=\operatorname{Bin}(y\mid n,\pi)$ is **binomial distribution** where $n$ is the number of trials and $y$ the number of timers event $1$ happens.
+- Prior $p(\pi)=\operatorname{Beta}(\alpha,\beta)$ is **beta distribution**.
+- The resulting posterior $p(\pi\mid y)=\operatorname{Beta}(\alpha+y,\beta+n-y)$ is **beta distribution**.
 
 ---
 
-Load the `algae` dataset.
+Load the `algae` dataset. [@bda_course_aalto]
 ```{r}
 library(aaltobda)
 data("algae")
@@ -20,12 +29,18 @@ data("algae")
 
 Algae dataset visualized.
 ```{r}
-a = sum(algae == 0) / length(algae)
-b = sum(algae == 1) / length(algae)
-barplot(c(a, b), ylim = c(0, 1.0), names.arg = c(0, 1))
+n = length(algae)
+a = sum(algae == 0) 
+b = sum(algae == 1)
+barplot(c(a/n, b/n), ylim = c(0, 1.0), names.arg = c(0, 1))
+```
+
+```{r}
+c(a, b, n)
 ```
 
 ## a)
+Point estimate $E(\pi \mid y)=\frac{\alpha + y}{\beta + n + y}$
 ```{r}
 beta_point_est <- function(prior_alpha, prior_beta, data) {
   n = length(data)
@@ -35,6 +50,7 @@ beta_point_est <- function(prior_alpha, prior_beta, data) {
 beta_point_est(prior_alpha = 2, prior_beta = 10, data = algae)
 ```
 
+$90$% interval estimate
 ```{r}
 beta_interval <- function(prior_alpha, prior_beta, data, prob) {
   n = length(data)
@@ -46,6 +62,7 @@ beta_interval(prior_alpha = 2, prior_beta = 10, data = algae, prob = 0.9)
 ```
 
 ## b)
+$Pr(\pi < 0.2)$
 ```{r}
 beta_low <- function(prior_alpha, prior_beta, data, pi_0) {
   n = length(data)
@@ -56,9 +73,21 @@ beta_low(prior_alpha = 2, prior_beta = 10, data = algae, pi_0 = 0.2)
 ```
 
 ## c)
+The random variables $\pi$ must be identically and independently distributed. This means that all lakes have an identical likelihood of having blue-green algae and if some lake has blue-green algae it doesn't affect the probability of other lakes having blue-green algae.
+
+We also need to assume, that the prior distribution is conjugate, i.e. beta distribution in the case of binomial likelihood.
 
 
 ## d)
-
+We can perform sensitivity analysis testing different value for `prior_alpha` and `prior_beta` parameters near the original values and comparing the results.
+```{r}
+for (prior_alpha in c(1, 2, 3)) {
+  for (prior_beta in c(9, 10, 11)) {
+    print(c(beta_interval(prior_alpha, prior_beta, data = algae, prob = 0.9),
+          beta_point_est(prior_alpha, prior_beta, data = algae)))
+  }
+}
+```
+Looking at the 90% interval and the point estimates, we can see that the changes around the original parameter values don't produce very large changes. This indicates that model is not too sensitive.
 
 ## References
