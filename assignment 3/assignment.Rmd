@@ -123,8 +123,40 @@ plot(x, d, type = "l")
 
 
 ## Inference for the difference between proportions
+```{r}
+# Control
+n0 = 674
+y0 = 39
+# Treatment
+n1 = 680
+y1 = 22
+```
+
 ### a)
+Point estimate
+```{r}
+p0 <- rbeta(100000, y0 + 1, n0 - y0 + 1)
+p1 <- rbeta(100000, y1 + 1, n1 - y1 + 1)
+posterior_odds_ratio_point_est <- function(p0, p1) {
+  mean((p1/(1-p1))/(p0/(1-p0)))
+}
+posterior_odds_ratio_point_est(p0, p1)
+```
+
 ### b)
+Interval estimate
+```{r}
+posterior_odds_ratio_interval <- function(p0, p1, prob) {
+  a = (1-prob)/2
+  quantile((p1/(1-p1))/(p0/(1-p0)), c(a, a+prob))
+}
+posterior_odds_ratio_interval(p0, p1, prob = 0.9)
+```
+
+Histogram
+```{r}
+hist((p1/(1-p1))/(p0/(1-p0)), breaks = 100)
+```
 
 ## Inference for the difference between normal means
 ### a)
