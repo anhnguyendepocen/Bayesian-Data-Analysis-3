@@ -1,0 +1,229 @@
+---
+title: "Bayesian Data Analysis - Assignment 4"
+author: Anonymous
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 2
+bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Bioassay model and importance sampling
+@bayesian_data_analysis_2013, Sections 3.7 and 10
+
+Load the libraries and data.
+```{r}
+library(ggplot2)
+library(mvtnorm)
+library(aaltobda)
+data("bioassay")
+set.seed(5923)
+```
+
+## a)
+We have the marginal distributions $\alpha \sim N(0, 2^2)$ and $\beta \sim N(10, 10^2)$ with correlation $\operatorname{corr}(\alpha, \beta) = 0.5$.
+
+The mean of $(\alpha,\beta)$ is
+$$
+[0, 10]
+$$
+
+For computing covariance we have the following identity
+$$
+\operatorname {corr} (X,Y)={\frac{\operatorname {cov} (X,Y)}{\sigma _{X}\sigma _{Y}}},
+$$
+where $\sigma_X$ and $\sigma_Y$ are the standard deviations. Also, the correlation is commutative
+$$
+\operatorname{corr}(X,Y)=\operatorname{corr}(Y,X).
+$$
+The covariance of a random variable with itself is its variance
+$$
+\operatorname{cov}(X,X) = \sigma_X^2.
+$$
+
+Then, the covariance matrix of $(\alpha,\beta)$ is
+$$
+\begin{bmatrix}
+\operatorname{cov}(\alpha,\alpha) & \operatorname{cov}(\alpha,\beta) \\
+\operatorname{cov}(\beta,\alpha) & \operatorname{cov}(\beta,\beta)
+\end{bmatrix} 
+=
+\begin{bmatrix}
+\sigma_\alpha^2 & \operatorname{corr}(\alpha, \beta) \sigma_\alpha \sigma_\beta \\
+\operatorname{corr}(\beta, \alpha) \sigma_\beta \sigma_\alpha & \sigma_\beta^2
+\end{bmatrix} 
+= 
+\begin{bmatrix}
+2^2 & 0.5 \cdot 2 \cdot 10 \\
+0.5 \cdot 10 \cdot 2 & 10^2
+\end{bmatrix} 
+=
+\begin{bmatrix}
+2^2 & 10 \\
+10 & 10^2
+\end{bmatrix} 
+$$
+
+## b)
+The logarithm of the density of the prior distribution
+$$
+\log p(\alpha,\beta\mid n, x)
+$$
+
+```{r}
+p_log_prior <- function(alpha, beta) {
+  dmvnorm(c(alpha, beta), 
+          mean = c(0, 10), 
+          sigma = matrix(c(2^2, 10, 10, 10^2), nrow = 2), 
+          log = TRUE)
+}
+```
+
+## c)
+The logarithm of the density of the posterior
+$$
+p(\alpha,\beta\mid y, n, x) \propto p(\alpha,\beta\mid n, x) p(y\mid \alpha, \beta, n, x)
+$$
+$$
+\log \left(p(\alpha,\beta\mid n, x) p(y\mid \alpha, \beta, n, x)\right) \propto \log(p(\alpha,\beta\mid n, x)) +  \log(p(y\mid \alpha, \beta, n, x))
+$$
+
+```{r}
+p_log_posterior <- function(alpha, beta, x = bioassay$x, y = bioassay$y, n = bioassay$n) {
+  p_log_prior(alpha, beta) + bioassaylp(alpha, beta, x, y, n)
+}
+```
+
+## d)
+Posterior density plot in grid points $\alpha\in[-4, 4]$ and $\beta\in[-10,30]$.
+```{r}
+bioassay_posterior_density_plot(c(-4, 4), c(-10, 30))
+```
+
+## e)
+The importance ratios for each draw when the target distribution is the posterior distribution
+$$
+w(\theta^s)=\frac{q(\theta^s \mid y)}{g(\theta^s)}
+$$
+In the logarithmic form
+$$
+\log w(\theta^s)=\log q(\theta^s \mid y) - \log g(\theta^s)
+$$
+
+
+```{r}
+log_importance_weights <- function(alpha, beta) {
+  n = length(alpha)
+  weights = numeric(n)
+  for (i in 1:n) {
+    weights[i] = p_log_posterior(alpha[i], beta[i]) - p_log_prior(alpha[i], beta[i])
+  }
+  weights
+}
+```
+
+Importance weights normalized to sum to $1$
+```{r}
+normalized_importance_weights <- function(alpha, beta) {
+  weights = exp(log_importance_weights(alpha, beta))
+  weights2 = weights - min(weights)
+  weights2 / sum(weights2)
+}
+```
+
+## f)
+Posterior mean using importance sampling is defined
+$$
+\frac{1/S \sum_{s=1}^S h(\theta^s) w(\theta^s)}{1/S \sum_{s=1}^S w(\theta^s)}.
+$$
+Since the importance weights are normalized, that is, $\sum_{s=1}^S w(\theta^s)=1$, the posterior mean reduces to the form
+$$
+\sum_{s=1}^S h(\theta^s) w(\theta^s).
+$$
+```{r}
+posterior_mean <- function(alpha, beta) {
+  weights = normalized_importance_weights(alpha, beta)
+  c(sum(alpha * weights), sum(beta * weights))
+}
+```
+
+Lets draw random values
+```{r}
+S <- 4000
+values <- rmvnorm(S, mean = c(0, 10), sigma = matrix(c(2^2, 10, 10, 10^2), nrow = 2))
+alpha <- values[,1]
+beta <- values[,2]
+```
+
+Then we have the following posterior mean
+```{r}
+posterior_mean(alpha, beta)
+```
+
+## g)
+The effective sample size is defined
+$$
+S_{eff}=\frac{1}{\sum_{s=1}^S \tilde{w}(\theta^s)^2}
+$$
+where $\tilde{w}$ are the normalized importance weights.
+```{r}
+S_eff <- function(alpha, beta) {
+  weights = normalized_importance_weights(alpha, beta)
+  1/sum(weights^2)
+}
+```
+
+```{r}
+S_eff(alpha, beta)
+```
+
+## h)
+Importance resampling without replacement.
+```{r}
+k = 1000  # k < S
+x = numeric(S)
+for (i in 1:S) {
+  x[i] = exp(p_log_posterior(alpha[i], beta[i]))
+}
+weights = normalized_importance_weights(alpha, beta)
+indices = sample(1:S, k, replace = FALSE, prob = weights)
+samples = x[indices]
+```
+
+Scatter plot of samples as a function of alpha
+```{r}
+plot(alpha[indices], samples)
+```
+
+Scatter plot of samples as a function of beta
+```{r}
+plot(beta[indices], samples)
+```
+
+## i)
+The probability that the drug is harmful.
+$$
+p(\beta>0\mid x,n,y)
+$$
+It can be computed from the ratio of samples where $\beta>0$
+```{r}
+sum_beta_larger_that_zero = 0
+for (i in indices) {
+  if (beta[i] > 0) {
+    sum_beta_larger_that_zero = sum_beta_larger_that_zero + x[i]
+  }
+}
+sum_beta_larger_that_zero / sum(samples)
+```
+
+## j)
+Histogram of the posterior distribution fo the LD50 conditional on $\beta>0$. Since $p(\beta>0\mid x,n,y)=1$ histogram contains all the samples.
+```{r}
+hist(-alpha[indices]/beta[indices], breaks=20)
+```
+
+# References
