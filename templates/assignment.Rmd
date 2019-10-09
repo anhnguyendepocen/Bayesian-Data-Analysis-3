@@ -10,6 +10,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 @bayesian_data_analysis_2013
 
-## Subtitle
+# Subtitle
 
-## References
+# References
