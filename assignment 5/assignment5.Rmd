@@ -1,0 +1,182 @@
+---
+title: "Bayesian Data Analysis - Assignment 5"
+author: Anonymous
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 1
+bibliography: bibliography.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Generalized linear model: Bioassay with Metropolis
+As for equations and algorithms used in this assignemnt, we refer to the course textbook, @bayesian_data_analysis_2013, chapters 3.7, 10, and 11.
+
+Load libraries and data.
+```{r}
+library(mvtnorm)
+library(rstan)
+library(aaltobda)
+data("bioassay")
+```
+
+## 1.
+Define the prior and posterior densities as in assignment 4. The likelihood is given in the `aaltobda` package.
+```{r}
+p_log_prior <- function(alpha, beta) {
+  mvtnorm::dmvnorm(c(alpha, beta), 
+          mean = c(0, 10), 
+          sigma = matrix(c(2^2, 10, 10, 10^2), nrow = 2), 
+          log = TRUE)
+}
+
+p_log_posterior <- function(alpha, beta, x = bioassay$x, y = bioassay$y, n = bioassay$n) {
+  p_log_prior(alpha, beta) + aaltobda::bioassaylp(alpha, beta, x, y, n)
+}
+```
+
+### a)
+The density ratio is defined as
+$$
+r = \frac{p(\theta^*\mid y)}{p(\theta^{t-1}\mid y)}.
+$$
+Using logarithmic densities we have
+$$
+r = \exp(\log p(\theta^*\mid y) - \log p(\theta^{t-1}\mid y)).
+$$
+
+```{r}
+density_ratio <- function(
+    alpha_propose, alpha_previous, beta_propose, beta_previous, 
+    x = bioassay$x, y = bioassay$y, n = bioassay$n) {
+  exp(p_log_posterior(alpha_propose, beta_propose) - 
+      p_log_posterior(alpha_previous, beta_previous))
+}
+```
+
+
+### b)
+The Metropolis algorithm for the bioassay data. Starting points are drawn from a multivariate normal distribution. As the proposal distributions we use the following normal distributions
+$$
+\begin{aligned}
+\alpha^* &\sim N(\alpha_{t-1}, \sigma_\alpha) \\
+\beta^* &\sim N(\beta_{t-1}, \sigma_\beta).
+\end{aligned}
+$$
+The standard deviations, $\sigma_\alpha$ and $\sigma_\beta$ can be set by the user.
+
+```{r}
+metropolis_bioassay <- function(sigma_alpha, sigma_beta, t_max) {
+  # Set the starting point at t = 1.
+  alpha <- numeric(t_max)
+  beta <- numeric(t_max)
+  values <- mvtnorm::rmvnorm(
+    1, mean = c(0, 10), sigma = matrix(c(2^2, 10, 10, 10^2), nrow = 2))
+  alpha[1] <- values[,1]
+  beta[1] <- values[,2]
+  
+  # Iterate from t = 2 to t = t_max.
+  for (t in 2:t_max) {
+    # Samples the proposals.
+    alpha_propose <- rnorm(1, alpha[t-1], sigma_alpha)
+    beta_propose <- rnorm(1, beta[t-1], sigma_beta)
+    
+    # Calculate the ratio of the densities.
+    r <- density_ratio(alpha_propose, alpha[t-1], beta_propose, beta[t-1])  
+    
+    # Set the values at time t.
+    if (runif(1) <= min(r, 1)) {
+      # `min(r, 1)` probability that the proposal is accepted.
+      alpha[t] <- alpha_propose
+      beta[t] <- beta_propose
+    } else {
+      alpha[t] <- alpha[t-1]
+      beta[t] <- beta[t-1]
+    }
+  }
+  
+  # Return the values.
+  list(alpha = alpha, beta = beta)
+}
+```
+
+
+## 2.
+We'll run two chains of the Metropolis algorithm using the parameters $\sigma_\alpha$, $\sigma_\beta$ and $t_{max}$ values below. We'll discard half of the iterations as warm up iterations.
+```{r}
+t_max = 2000
+warm_up = floor(t_max / 2)
+output1 = metropolis_bioassay(sigma_alpha = 1, sigma_beta = 5, t_max = t_max)
+output2 = metropolis_bioassay(sigma_alpha = 1, sigma_beta = 5, t_max = t_max)
+```
+
+Plot of $\alpha$ in as a function of simulation time $t$.
+```{r}
+plot(1:t_max, output1$alpha, "l", xlab = "t", ylab = "alpha", col = "blue")
+lines(1:t_max, output2$alpha, "l", xlab = "t", ylab = "alpha", col = "red")
+```
+
+Plot of $\beta$ in as a function of simulation time $t$.
+```{r}
+plot(1:t_max, output1$beta, "l", xlab = "t", ylab = "beta", col = "blue")
+lines(1:t_max, output2$beta, "l", xlab = "t", ylab = "beta", col = "red")
+```
+
+Two chains, indicated by the colors blue and red, seem to convergence for both $\alpha$ and $\beta$ when visually assessing the convergence from the plots.
+
+We can also verify this by computing the difference between the mean and variance of $\alpha$ and $\beta$ for both chains after the varm up iterations.
+```{r}
+abs(mean(output1$alpha[warm_up:t_max]) - mean(output2$alpha[warm_up:t_max]))
+abs(var(output1$alpha[warm_up:t_max]) - var(output2$alpha[warm_up:t_max]))
+```
+
+```{r}
+abs(mean(output1$beta[warm_up:t_max]) - mean(output2$beta[warm_up:t_max]))
+abs(var(output1$beta[warm_up:t_max]) - var(output2$beta[warm_up:t_max]))
+```
+The values are small indicating convergence.
+
+
+## 3.
+The $\hat{R}$ for $\alpha$ and $\beta$ is calculated using $\hat{R}$ from the `rstan` library.
+
+```{r}
+rstan::Rhat(matrix(c(output1$alpha[warm_up:t_max], output2$alpha[warm_up:t_max]), ncol = 2))
+```
+
+```{r}
+rstan::Rhat(matrix(c(output1$beta[warm_up:t_max], output2$beta[warm_up:t_max]), ncol = 2))
+```
+
+The values of $\hat{R}$ are less than $1.05$ (value from `rstan::Rhat` documentation) which indicates convergence for the chains.
+
+
+## 4.
+Scatter plot of $\alpha$ and $\beta$ for both chains.
+```{r}
+plot(output1$alpha[warm_up:t_max], output1$beta[warm_up:t_max], 
+     "p", xlab = "alpha", ylab = "beta",
+     ylim = c(-10, 40), xlim = c(-4, 10), 
+     col = rgb(red = 0, green = 0, blue = 1, alpha = 1))
+lines(output2$alpha[warm_up:t_max], output2$beta[warm_up:t_max], 
+      "p", xlab = "alpha", ylab = "beta",
+      ylim = c(-10, 40), xlim = c(-4, 10), 
+      col = rgb(red = 1, green = 0, blue = 0, alpha = 1))
+```
+
+The resulting plot look similar to the Figure 3.3b in @bayesian_data_analysis_2013.
+
+
+# Markmyassignment
+```{r}
+library(markmyassignment)
+set_assignment(
+  "https://github.com/avehtari/BDA_course_Aalto/blob/master/exercises/tests/ex5.yml")
+mark_my_assignment()
+```
+
+
+# References
