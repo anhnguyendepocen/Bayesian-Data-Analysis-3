@@ -1,5 +1,7 @@
 ## Project
+*.Rproj
 *.pdf
+*.rds
 
 ## R
 # History files

@@ -1,0 +1,105 @@
+---
+title: "Bayesian Data Analysis - Assignment 6"
+author: Anonymous
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 1
+bibliography: bibliography.bib
+urlcolor: cyan
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Generalized linear model: Bioassay with Stan
+As for equations and algorithms used in this assignemnt, we refer to the course textbook, @bayesian_data_analysis_2013, chapter 3.7. For features related to Stan we refer to the [Stan documentation](https://mc-stan.org/users/documentation/).
+
+Load libraries and data.
+```{r, message=FALSE}
+library(ggplot2)
+library(StanHeaders)
+library(rstan)
+library(aaltobda)
+data("bioassay")
+```
+
+Set `rstan` options
+```{r}
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+
+## 1.
+The model for the bioassay experiment in Stan syntax.
+```{stan, output.var="bioassay_stan"}
+data {
+  int <lower=0> N;  // number of rows in the data set
+  int <lower=0> n[N];
+  vector[N] x;
+  int y[N];
+  vector[2] mu;  // mean 
+  matrix[2, 2] sigma;  // variance (matrix)
+}
+
+parameters {
+  vector[2] theta;  // (alpha, beta)
+}
+
+transformed parameters {
+  vector[N] r;  // dose-response relation
+  r = theta[1] + theta[2] * x;
+}
+
+model {
+  theta ~ multi_normal(mu, sigma);  // prior 
+  y ~ binomial_logit(n, r);  // likelihood
+}
+
+```
+
+The input data for the stan model.
+```{r}
+data_bioassay = list(
+  mu = c(0, 10),
+  sigma = matrix(c(2^2, 10, 10, 10^2), nrow=2),
+  N = dim(bioassay)[1],
+  x = bioassay$x,
+  y = bioassay$y,
+  n = bioassay$n
+)
+```
+
+Fit the Stan model to the data.
+```{r}
+fit <- sampling(bioassay_stan, data = data_bioassay)
+```
+
+
+## 2.
+Rhat values close to $1$, under $1.05$, indicate convergence. 
+
+Let print the values obtained from the fit.
+```{r}
+print(fit)
+```
+
+In the printout, `theta[1]` indicates $\alpha$ and `theta[2]` indicates $\beta$. Both have `Rhat` values close to $1$, which indicates that both have converged.
+
+
+## 3.
+Bayesplot is used for visulization of the results.
+```{r, message=FALSE}
+library(bayesplot)
+```
+
+Scatter plot of $\alpha$ (`theta[1]`) and $\beta$ (`theta[2]`).
+```{r}
+bayesplot::mcmc_scatter(fit, pars = c("theta[1]", "theta[2]"))
+```
+The resulting plot looks similar to the Figure 3.3b in @bayesian_data_analysis_2013.
+
+
+# References
