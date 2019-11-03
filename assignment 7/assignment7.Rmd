@@ -1,0 +1,374 @@
+---
+title: "Bayesian Data Analysis - Assignment 7"
+author: Anonymous
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 1
+bibliography: bibliography.bib
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/harvard-anglia-ruskin-university.csl
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load libraries and data.
+```{r, message=FALSE}
+library(ggplot2)
+library(StanHeaders)
+library(rstan)
+library(bayesplot)
+library(aaltobda)
+```
+
+Set `rstan` options
+```{r}
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+The course textbook @bayesian_data_analysis_2013.
+
+
+# 1. Linear model: drowning data with Stan
+Load the downning data.
+```{r}
+data("drowning")
+```
+
+## 1.
+The fixed Stan model.
+```{stan, output.var = "drowning_stan"}
+data {
+  int<lower=0> N;  // number of data points
+  vector[N] x;     // observation year
+  vector[N] y;     // observation number of drowned
+  real xpred;      // prediction year
+}
+
+parameters {
+  real alpha;
+  real beta;
+  //real<upper=0> sigma;
+  real<lower=0> sigma;
+}
+transformed parameters {
+  vector[N] mu;
+  mu = alpha + beta * x;
+}
+model {
+  y ~ normal(mu, sigma);
+}
+generated quantities {
+  real ypred;  // Predicted drownings in year xpred
+  //ypred = normal_rng(mu, sigma);
+  ypred = normal_rng(alpha + beta * xpred, sigma);
+}
+```
+
+The input data to the drowning model. The prediction year `xpred` is set to `2019`.
+```{r}
+drowning_data = list(
+  N = dim(drowning)[1],
+  x = drowning$year,
+  y = drowning$drownings,
+  xpred = 2019
+)
+```
+
+Fit the data to the drowning model and predict the drownings at year `xpred`.
+```{r, message=FALSE}
+fit_drowning1 <- sampling(drowning_stan, data = drowning_data, control = list(max_treedepth = 15))
+```
+
+
+```{r}
+print(fit_drowning1, probs = c(0.05, 0.5, 0.95))
+```
+
+The results
+
+i) Trend of number of people drown per year.
+ii) Posterior predictive distribution for year $2019$
+
+```{r}
+mcmc_hist(fit_drowning1, pars = c("beta", "ypred"))
+```
+
+
+## 2.
+The prior distribution for $\beta$
+$$
+\beta \sim N(0, \tau^2).
+$$
+Mean $\mu=0$.
+
+There are on average $138$ drownings per year. We'll set $\tau$ such that
+$$
+Pr(-69<\beta<69)=0.99.
+$$
+
+$$
+\begin{aligned}
+Pr(-69<\beta<69) &= P(\beta<69)-P(\beta<-69) \\
+&= P(\beta<69) - (1 - P(\beta<69)) \\
+&= 2 P(\beta<69) - 1
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+2 P(\beta<69) - 1 &= 0.99 \\
+P(\beta<69) &= 1.99/2
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+Z = \frac{X-\mu}{\tau} \\
+\tau = \frac{X-\mu}{Z}
+\end{aligned}
+$$
+The $Z$ value for $1.99/2=0.995$ can be looked up from the [Standard normal table](https://en.wikipedia.org/wiki/Standard_normal_table).
+```{r}
+drowning_avg = 138
+Z = 2.58
+X = drowning_avg/2
+mu = 0
+tau = (X-mu)/Z
+print(tau)
+```
+
+We can can also check that the answer is correct.
+```{r}
+pnorm(X, mean = 0, sd = tau) - pnorm(-X, mean = 0, sd = tau)
+```
+
+
+## 3.
+Stan model for drowning data with prior for $\beta$.
+```{stan, output.var = "drowning_stan2"}
+data {
+  int<lower=0> N;  // number of data points
+  vector[N] x;     // observation year
+  vector[N] y;     // observation number of drowned
+  real xpred;      // prediction year
+  real <lower=0>tau;  // standard deviation for the prior
+}
+
+parameters {
+  real alpha;
+  real beta;
+  real<lower=0> sigma;
+}
+transformed parameters {
+  vector[N] mu;
+  mu = alpha + beta * x;
+}
+model {
+  beta ~ normal(0, tau);  // prior
+  y ~ normal(mu, sigma);
+}
+generated quantities {
+  real ypred;  // Predicted drownings in year xpred
+  ypred = normal_rng(alpha + beta * xpred, sigma);
+}
+```
+
+The input data to the drowning model. The prediction year `xpred` is set to `2019`.
+```{r}
+drowning_data2 = list(
+  N = dim(drowning)[1],
+  x = drowning$year,
+  y = drowning$drownings,
+  xpred = 2019,
+  tau = tau
+)
+```
+
+Fit the data to the drowning model and predict the drownings at year `xpred`.
+```{r, message=FALSE}
+fit_drowning2 <- sampling(drowning_stan2, data = drowning_data2, control = list(max_treedepth = 15))
+```
+
+```{r}
+print(fit_drowning2, probs = c(0.05, 0.5, 0.95))
+```
+
+The results
+
+i) Trend of number of people drown per year.
+ii) Posterior predictive distribution for year $2019$
+
+```{r}
+mcmc_hist(fit_drowning2, pars = c("beta", "ypred"))
+```
+
+
+# 2. Hierarchical model: factory data with Stan
+Hierarchical normal model is explained in @bayesian_data_analysis_2013, chapter 11.6.
+
+1) Pooled model: No distrinction is made between the machines.
+2) Hierarchical model: Machines have separate means, but same variance.
+3) Separate model: Machines have separate means and variances.
+
+Load the factory data.
+```{r}
+data("factory")
+```
+
+Three result histogram are plotted for each model 
+
+i) The posterior distribution of the mean of the quality measurements of the sixth
+machine.
+ii) The predictive distribution for another quality measurement of the sixth machine.
+iii) The posterior distribution of the mean of the quality measurements of the seventh
+machine.
+
+
+## Pooled model
+The pooled factory Stan model.
+```{stan, output.var = "factory_stan1"}
+data {
+  int<lower=0> n;  // number of observations
+  vector[n] y;  // quality control measurement
+}
+
+parameters {
+  real theta;  // mean
+  real<lower=0> sigma;  // variance
+}
+
+model {
+  for (i in 1:n) {
+    y[i] ~ normal(theta, sigma);
+  }
+}
+```
+
+```{r, message = FALSE}
+factory_data1 = list(
+  n = prod(dim(factory)),
+  y = unlist(factory)
+)
+fit_factory1 <- sampling(factory_stan1, data = factory_data1, control = list(max_treedepth = 15))
+```
+
+```{r}
+print(fit_factory1, probs = c(0.05, 0.5, 0.95))
+```
+
+```{r}
+mcmc_hist(fit_factory1, pars = c("theta"))
+```
+
+
+## Hierarchical model
+The hierarchical factory Stan model.
+```{stan, output.var = "factory_stan2"}
+data {
+  int<lower=0> J;  // number of groups
+  int<lower=0> n;  // number of observations per group
+  matrix[n, J] y;  // quality control measurement
+}
+
+parameters {
+  vector[J] theta;  // mean
+  real<lower=0> sigma;  // variance
+  real mu;  // group mean
+  real<lower=0> tau;  // group variance
+}
+
+model {
+  for (j in 1:J) {
+    theta[j] ~ normal(mu, tau);
+  }
+  for (j in 1:J){
+    for (i in 1:n) {
+      y[i, j] ~ normal(theta[j], sigma);
+    }
+  }
+}
+
+generated quantities {
+  real y_pred;  // Prediction for another quality measurement on 6th machine
+  real theta_pred;  // Posterior distribution of the mean quality measurement on 7th machine
+  y_pred = normal_rng(theta[6], sigma);
+  theta_pred = normal_rng(mu, tau);
+}
+```
+
+```{r, message = FALSE}
+factory_data2 = list(
+  J = dim(factory)[2],
+  n = dim(factory)[1],
+  y = factory
+)
+fit_factory2 <- sampling(factory_stan2, data = factory_data2, control = list(max_treedepth = 15))
+```
+
+```{r}
+print(fit_factory2, probs = c(0.05, 0.5, 0.95))
+```
+
+```{r}
+mcmc_hist(fit_factory2, pars = c("theta[6]", "y_pred", "theta_pred"))
+```
+
+
+## Separate model
+The separate factory Stan model.
+```{stan, output.var = "factory_stan3"}
+data {
+  int<lower=0> J;  // number of groups
+  int<lower=0> n;  // number of observations per group
+  matrix[n, J] y;  // quality control measurement
+}
+
+parameters {
+  vector[J] theta;  // mean
+  vector<lower=0>[J] sigma;  // variance
+  real mu;  // group mean
+  real<lower=0> tau;  // group variance
+}
+
+model {
+  for (j in 1:J) {
+    theta[j] ~ normal(mu, tau);
+  }
+  for (j in 1:J){
+    for (i in 1:n) {
+      y[i, j] ~ normal(theta[j], sigma[j]);
+    }
+  }
+}
+
+generated quantities {
+  real y_pred;  // Prediction for another quality measurement on 6th machine
+  real theta_pred;  // Posterior distribution of the mean quality measurement on 7th machine
+  y_pred = normal_rng(theta[6], sigma[6]);
+  theta_pred = normal_rng(mu, tau);
+}
+```
+
+```{r, message = FALSE}
+factory_data3 = list(
+  J = dim(factory)[2],
+  n = dim(factory)[1],
+  y = factory
+)
+fit_factory3 <- sampling(factory_stan3, data = factory_data3, control = list(max_treedepth = 15))
+```
+
+```{r}
+print(fit_factory3, probs = c(0.05, 0.5, 0.95))
+```
+
+```{r}
+mcmc_hist(fit_factory3, pars = c("theta[6]", "y_pred", "theta_pred"))
+```
+
+
+# References
