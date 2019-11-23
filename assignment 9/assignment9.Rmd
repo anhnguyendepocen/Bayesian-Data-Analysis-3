@@ -1,0 +1,134 @@
+---
+title: "Bayesian Data Analysis - Assignment 9"
+author: Anonymous
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 1
+bibliography: bibliography.bib
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/harvard-anglia-ruskin-university.csl
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load libraries and data.
+```{r, message=FALSE}
+library(rstan)
+library(ggplot2)
+library(bayesplot)
+library(aaltobda)
+data("factory")
+```
+
+Set `rstan` options
+```{r}
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+The course textbook @bayesian_data_analysis_2013.
+
+# Subtitle
+The hierarchical factory Stan model.
+```{stan, output.var = "factory_stan"}
+data {
+  int<lower=0> N;  // number of observations per group
+  int<lower=0> J;  // number of groups
+  matrix[N, J] y;  // quality control measurement
+}
+
+parameters {
+  vector[J] theta;  // mean
+  real<lower=0> sigma;  // variance
+  real mu;  // group mean
+  real<lower=0> tau;  // group variance
+}
+
+model {
+  for (j in 1:J) {
+    theta[j] ~ normal(mu, tau);
+  }
+  for (j in 1:J){
+    for (i in 1:N) {
+      y[i, j] ~ normal(theta[j], sigma);
+    }
+  }
+}
+
+generated quantities {
+  vector[J+1] y_pred;
+  real theta_pred;
+  theta_pred = normal_rng(mu, tau);
+  for (j in 1:J) {
+    y_pred[j] = normal_rng(theta[j], sigma);
+  }
+  y_pred[J+1] = normal_rng(theta_pred, sigma);
+}
+```
+
+```{r, message = FALSE}
+factory_data <- list(
+  N = dim(factory)[1],
+  J = dim(factory)[2],
+  y = factory
+)
+fit_factory <- sampling(
+  factory_stan, 
+  data = factory_data, 
+  control = list(max_treedepth = 15)
+)
+```
+
+```{r}
+print(fit_factory, pars = c("y_pred"), probs = c())
+```
+
+The utility function.
+```{r}
+utility <- function(draws, price = 200, cost = 106, quality_threshold = 85) {
+  s = 0
+  for (draw in draws) {
+    if (draw < quality_threshold)
+      s = s - cost
+    else
+      s = s - cost + price
+  }
+  s / length(draws)
+}
+```
+
+Test case for utility function.
+```{r}
+y_pred <- c(123.80, 85.23, 70.16, 80.57, 84.91)
+utility(y_pred)
+```
+
+The expectedutilities of machines 1 to 6.
+```{r}
+v = rstan::extract(fit_factory)
+J = 6
+utilities = rep(0, J)
+for (j in 1:J) {
+  utilities[j] = utility(v$y_pred[, j])
+}
+utilities
+```
+
+Machines ranked from worst to best. The indices denote the machine numbers.
+```{r}
+sort(utilities, index.return = TRUE)
+``` 
+Utility values denote the expected profit per product for a machine. For example, machine 1 has negative utility, and therefore is not profitable, the other machines are profitable.
+
+The expected utility of 7th machine.
+```{r}
+utility(v$y_pred[, 7])
+```
+
+Company owner should buy the 7th machine because the prediction has positive utility.
+
+
+# References
