@@ -1,0 +1,213 @@
+---
+title: "Bayesian Data Analysis - Assignment 8"
+author: Anonymous
+output: 
+  pdf_document: 
+    #toc: yes
+    #toc_depth: 1
+bibliography: bibliography.bib
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/harvard-anglia-ruskin-university.csl
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load libraries and data.
+```{r, message=FALSE}
+library(rstan)
+library(loo)
+library(ggplot2)
+library(bayesplot)
+library(aaltobda)
+data("factory")
+```
+
+Set `rstan` options
+```{r}
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+```
+
+The course textbook @bayesian_data_analysis_2013.
+
+# 1.
+## Pooled Model
+The pooled factory Stan model.
+```{stan, output.var = "factory_stan1"}
+data {
+  int<lower=0> N;  // number of observations
+  vector[N] y;  // quality control measurement
+}
+
+parameters {
+  real theta;  // mean
+  real<lower=0> sigma;  // variance
+}
+
+model {
+  for (i in 1:N) {
+    y[i] ~ normal(theta, sigma);
+  }
+}
+
+generated quantities {
+  vector[N] log_lik;
+  for (i in 1:N) {
+    log_lik[i] = normal_lpdf(y[i] | theta, sigma);
+  }
+}
+```
+
+```{r, message = FALSE}
+factory_data1 <- list(
+  N = prod(dim(factory)),
+  y = unlist(factory)
+)
+fit_factory1 <- sampling(
+  factory_stan1, 
+  data = factory_data1, 
+  control = list(max_treedepth = 15)
+)
+```
+
+
+## Separate Model
+The separate factory Stan model.
+```{stan, output.var = "factory_stan2"}
+data {
+  int<lower=0> N;  // number of observations
+  int<lower=0> J;  // number of groups
+  matrix[N, J] y;  // quality control measurement
+}
+
+parameters {
+  real theta[J];  // mean
+  real<lower=0> sigma[J];  // variance
+}
+
+model {
+  for (j in 1:J){
+    for (i in 1:N) {
+      y[i, j] ~ normal(theta[j], sigma[j]);
+    }
+  }
+}
+
+generated quantities {
+  matrix[N, J] log_lik;
+  for (j in 1:J) {
+    for (i in 1:N) {
+      log_lik[i, j] = normal_lpdf(y[i, j] | theta[j], sigma[j]);
+    }
+  }
+}
+```
+
+```{r, message = FALSE}
+factory_data2 <- list(
+  N = dim(factory)[1],
+  J = dim(factory)[2],
+  y = factory
+)
+fit_factory2 <- sampling(
+  factory_stan2, 
+  data = factory_data2, 
+  control = list(max_treedepth = 15)
+)
+```
+
+
+## Hierarchical Model
+The hierarchical factory Stan model.
+```{stan, output.var = "factory_stan3"}
+data {
+  int<lower=0> N;  // number of observations per group
+  int<lower=0> J;  // number of groups
+  matrix[N, J] y;  // quality control measurement
+}
+
+parameters {
+  vector[J] theta;  // mean
+  real<lower=0> sigma;  // variance
+  real mu;  // group mean
+  real<lower=0> tau;  // group variance
+}
+
+model {
+  for (j in 1:J) {
+    theta[j] ~ normal(mu, tau);
+  }
+  for (j in 1:J){
+    for (i in 1:N) {
+      y[i, j] ~ normal(theta[j], sigma);
+    }
+  }
+}
+
+generated quantities {
+  matrix[N, J] log_lik;
+  for (j in 1:J) {
+    for (i in 1:N) {
+      log_lik[i, j] = normal_lpdf(y[i, j] | theta[j], sigma);
+    }
+  }
+}
+```
+
+```{r, message = FALSE}
+factory_data3 <- list(
+  N = dim(factory)[1],
+  J = dim(factory)[2],
+  y = factory
+)
+fit_factory3 <- sampling(
+  factory_stan3, 
+  data = factory_data3, 
+  control = list(max_treedepth = 15)
+)
+```
+
+
+# 2. and 3.
+The PSIS-LOO values and the $\hat{k}$-value, `p_loo`,  and the effective number of parameters $P_{eff}$, `elpd_loo`, for each model.
+
+## Pooled model
+```{r}
+r1 <- loo::loo(fit_factory1)
+print(r1)
+```
+
+```{r}
+plot(r1)
+```
+
+## Separate model
+```{r}
+r2 = loo::loo(fit_factory2)
+print(r2)
+```
+
+```{r}
+plot(r2)
+```
+
+## Hierarchical model
+```{r}
+r3 = loo::loo(fit_factory3)
+print(r3)
+```
+
+```{r}
+plot(r3)
+```
+
+
+# 4.
+
+
+# 5.
+
+
+# References
