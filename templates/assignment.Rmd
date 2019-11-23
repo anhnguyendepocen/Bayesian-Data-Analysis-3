@@ -1,7 +1,13 @@
 ---
 title: "Bayesian Data Analysis - Assignment X"
-output: pdf_document
+author: Anonymous
+output: 
+  pdf_document: 
+    toc: yes
+    toc_depth: 1
 bibliography: bibliography.bib
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/harvard-anglia-ruskin-university.csl
+urlcolor: blue
 ---
 
 ```{r setup, include=FALSE}
